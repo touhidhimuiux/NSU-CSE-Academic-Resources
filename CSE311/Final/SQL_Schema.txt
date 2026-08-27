@@ -1,0 +1,230 @@
+-- ============================================
+-- 1. DEPARTMENT
+-- ============================================
+CREATE TABLE Department (
+    dept_name      VARCHAR(50) PRIMARY KEY,
+    building       VARCHAR(50),
+    budget         DECIMAL(12,2) CHECK (budget > 0)
+);
+
+-- ============================================
+-- 2. INSTRUCTOR
+-- ============================================
+CREATE TABLE Instructor (
+    ID             CHAR(5) PRIMARY KEY,
+    name           VARCHAR(50) NOT NULL,
+    dept_name      VARCHAR(50),
+    salary         DECIMAL(10,2) CHECK (salary > 0),
+    FOREIGN KEY (dept_name) REFERENCES Department(dept_name)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
+
+-- ============================================
+-- 3. COURSE
+-- ============================================
+CREATE TABLE Course (
+    course_id      CHAR(8) PRIMARY KEY,
+    title          VARCHAR(100) NOT NULL,
+    dept_name      VARCHAR(50),
+    credits        INT CHECK (credits > 0),
+    FOREIGN KEY (dept_name) REFERENCES Department(dept_name)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
+
+-- ============================================
+-- 4. CLASSROOM
+-- ============================================
+CREATE TABLE Classroom (
+    building       VARCHAR(50),
+    room_number    VARCHAR(10),
+    capacity       INT CHECK (capacity > 0),
+    PRIMARY KEY (building, room_number)
+);
+
+-- ============================================
+-- 5. SECTION
+-- ============================================
+CREATE TABLE Section (
+    course_id      CHAR(8),
+    sec_id         VARCHAR(8),
+    semester       VARCHAR(6) CHECK (semester IN ('Fall', 'Winter', 'Spring', 'Summer')),
+    year           INT CHECK (year >= 2000),
+    building       VARCHAR(50),
+    room_number    VARCHAR(10),
+    time_slot_id   VARCHAR(8),
+    PRIMARY KEY (course_id, sec_id, semester, year),
+    FOREIGN KEY (course_id) REFERENCES Course(course_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    FOREIGN KEY (building, room_number) REFERENCES Classroom(building, room_number)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
+
+-- ============================================
+-- 6. TEACHES (INSTRUCTOR–SECTION RELATION)
+-- ============================================
+CREATE TABLE Teaches (
+    ID             CHAR(5),
+    course_id      CHAR(8),
+    sec_id         VARCHAR(8),
+    semester       VARCHAR(6),
+    year           INT,
+    PRIMARY KEY (ID, course_id, sec_id, semester, year),
+    FOREIGN KEY (ID) REFERENCES Instructor(ID)
+        ON DELETE CASCADE,
+    FOREIGN KEY (course_id, sec_id, semester, year)
+        REFERENCES Section(course_id, sec_id, semester, year)
+        ON DELETE CASCADE
+);
+
+-- ============================================
+-- 7. STUDENT
+-- ============================================
+CREATE TABLE Student (
+    ID             CHAR(5) PRIMARY KEY,
+    name           VARCHAR(50) NOT NULL,
+    dept_name      VARCHAR(50),
+    tot_cred       INT CHECK (tot_cred >= 0),
+    FOREIGN KEY (dept_name) REFERENCES Department(dept_name)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+);
+
+-- ============================================
+-- 8. TAKES (STUDENT–SECTION RELATION)
+-- ============================================
+CREATE TABLE Takes (
+    ID             CHAR(5),
+    course_id      CHAR(8),
+    sec_id         VARCHAR(8),
+    semester       VARCHAR(6),
+    year           INT,
+    grade          CHAR(2),
+    PRIMARY KEY (ID, course_id, sec_id, semester, year),
+    FOREIGN KEY (ID) REFERENCES Student(ID)
+        ON DELETE CASCADE,
+    FOREIGN KEY (course_id, sec_id, semester, year)
+        REFERENCES Section(course_id, sec_id, semester, year)
+        ON DELETE CASCADE
+);
+
+-- ============================================
+-- 9. ADVISOR (INSTRUCTOR–STUDENT RELATION)
+-- ============================================
+CREATE TABLE Advisor (
+    s_ID           CHAR(5),
+    i_ID           CHAR(5),
+    PRIMARY KEY (s_ID),
+    FOREIGN KEY (s_ID) REFERENCES Student(ID)
+        ON DELETE CASCADE,
+    FOREIGN KEY (i_ID) REFERENCES Instructor(ID)
+        ON DELETE SET NULL
+);
+
+-- ============================================
+-- 10. TIME_SLOT
+-- ============================================
+CREATE TABLE Time_Slot (
+    time_slot_id   VARCHAR(8),
+    day            CHAR(3),
+    start_time     TIME,
+    end_time       TIME,
+    PRIMARY KEY (time_slot_id, day, start_time)
+);
+
+-- ============================================
+-- 1. DEPARTMENT
+-- ============================================
+INSERT INTO Department VALUES
+('Computer Science', 'Taylor', 100000),
+('Physics', 'Watson', 85000),
+('Mathematics', 'Newton', 75000);
+
+-- ============================================
+-- 2. INSTRUCTOR
+-- ============================================
+INSERT INTO Instructor VALUES
+('10101', 'Srinivasan', 'Computer Science', 65000),
+('12121', 'Wu', 'Finance', 90000),  -- this department isn’t defined, just for demo
+('15151', 'Mozart', 'Music', 40000), -- same note
+('22222', 'Einstein', 'Physics', 95000),
+('32343', 'El Said', 'History', 60000),
+('33456', 'Gold', 'Physics', 87000),
+('45565', 'Katz', 'Computer Science', 75000);
+
+-- ============================================
+-- 3. COURSE
+-- ============================================
+INSERT INTO Course VALUES
+('CS-101', 'Intro to Computer Science', 'Computer Science', 4),
+('CS-201', 'Data Structures', 'Computer Science', 3),
+('CS-301', 'Operating Systems', 'Computer Science', 3),
+('PH-101', 'Classical Mechanics', 'Physics', 4),
+('PH-201', 'Quantum Mechanics', 'Physics', 4),
+('MA-101', 'Calculus I', 'Mathematics', 3),
+('MA-201', 'Linear Algebra', 'Mathematics', 3);
+
+-- ============================================
+-- 4. CLASSROOM
+-- ============================================
+INSERT INTO Classroom VALUES
+('Taylor', '3128', 50),
+('Watson', '120', 80),
+('Newton', '202', 60);
+
+-- ============================================
+-- 5. TIME_SLOT
+-- ============================================
+INSERT INTO Time_Slot VALUES
+('TS1', 'Mon', '09:00', '10:15'),
+('TS1', 'Wed', '09:00', '10:15'),
+('TS2', 'Tue', '10:30', '11:45'),
+('TS2', 'Thu', '10:30', '11:45'),
+('TS3', 'Fri', '13:00', '15:30');
+
+-- ============================================
+-- 6. SECTION
+-- ============================================
+INSERT INTO Section VALUES
+('CS-101', '1', 'Fall', 2024, 'Taylor', '3128', 'TS1'),
+('CS-201', '1', 'Fall', 2024, 'Taylor', '3128', 'TS2'),
+('PH-101', '1', 'Fall', 2024, 'Watson', '120', 'TS1'),
+('MA-101', '1', 'Fall', 2024, 'Newton', '202', 'TS2');
+
+-- ============================================
+-- 7. TEACHES
+-- ============================================
+INSERT INTO Teaches VALUES
+('10101', 'CS-101', '1', 'Fall', 2024),
+('45565', 'CS-201', '1', 'Fall', 2024),
+('22222', 'PH-101', '1', 'Fall', 2024);
+
+-- ============================================
+-- 8. STUDENT
+-- ============================================
+INSERT INTO Student VALUES
+('12345', 'Shankar', 'Computer Science', 32),
+('54321', 'Anand', 'Physics', 20),
+('67890', 'Maria', 'Mathematics', 15),
+('98765', 'John', 'Computer Science', 28);
+
+-- ============================================
+-- 9. TAKES
+-- ============================================
+INSERT INTO Takes VALUES
+('12345', 'CS-101', '1', 'Fall', 2024, 'A'),
+('12345', 'CS-201', '1', 'Fall', 2024, 'B+'),
+('54321', 'PH-101', '1', 'Fall', 2024, 'A'),
+('67890', 'MA-101', '1', 'Fall', 2024, 'A-'),
+('98765', 'CS-101', '1', 'Fall', 2024, 'B');
+
+-- ============================================
+-- 10. ADVISOR
+-- ============================================
+INSERT INTO Advisor VALUES
+('12345', '10101'),
+('54321', '22222'),
+('98765', '45565');
