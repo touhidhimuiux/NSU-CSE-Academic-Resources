@@ -1,0 +1,131 @@
+E:/Project_332/sl2.v {1 {vlog -work work -stats=none E:/Project_332/sl2.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module slt2
+
+Top level modules:
+	slt2
+
+} {} {}} E:/Project_332/control.v {1 {vlog -work work -stats=none E:/Project_332/control.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module Controlunit
+
+Top level modules:
+	Controlunit
+
+} {} {}} E:/Project_332/regfile32.v {1 {vlog -work work -stats=none E:/Project_332/regfile32.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module registerfile32
+
+Top level modules:
+	registerfile32
+
+} {} {}} E:/Project_332/rom.v {1 {vlog -work work -stats=none E:/Project_332/rom.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module rom
+
+Top level modules:
+	rom
+
+} {} {}} E:/Project_332/ram.v {1 {vlog -work work -stats=none E:/Project_332/ram.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module ram
+
+Top level modules:
+	ram
+
+} {} {}} E:/Project_332/adder.v {1 {vlog -work work -stats=none E:/Project_332/adder.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module adder
+-- Compiling module FA
+
+Top level modules:
+	adder
+
+} {} {}} E:/Project_332/signext.v {1 {vlog -work work -stats=none E:/Project_332/signext.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module signext
+
+Top level modules:
+	signext
+
+} {} {}} E:/Project_332/decoder4.v {1 {vlog -work work -stats=none E:/Project_332/decoder4.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module decoder4
+
+Top level modules:
+	decoder4
+
+} {} {}} E:/Project_332/flopr_param.v {1 {vlog -work work -stats=none E:/Project_332/flopr_param.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module flopr_param
+
+Top level modules:
+	flopr_param
+
+} {} {}} E:/Project_332/MIPS_SCP_tb.v {1 {vlog -work work -stats=none E:/Project_332/MIPS_SCP_tb.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module MIPS_SCP_tb
+
+Top level modules:
+	MIPS_SCP_tb
+
+} {} {}} E:/Project_332/mux2.v {1 {vlog -work work -stats=none E:/Project_332/mux2.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module mux2
+
+Top level modules:
+	mux2
+
+} {} {}} E:/Project_332/mux4.v {1 {vlog -work work -stats=none E:/Project_332/mux4.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module mux4
+
+Top level modules:
+	mux4
+
+} {} {}} E:/Project_332/MIPS_SCP.v {1 {vlog -work work -stats=none E:/Project_332/MIPS_SCP.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module adder
+-- Compiling module FA
+-- Compiling module alu32
+-- Compiling module flopr_param
+-- Compiling module mux2
+-- Compiling module mux4
+-- Compiling module registerfile32
+-- Compiling module signext
+-- Compiling module slt2
+-- Compiling module Datapath
+-- Compiling module ram
+-- Compiling module rom
+-- Compiling module Controlunit
+-- Compiling module MIPS_SCP
+
+Top level modules:
+	mux4
+	MIPS_SCP
+
+} {} {}} E:/Project_332/alu32.v {1 {vlog -work work -stats=none E:/Project_332/alu32.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module alu32
+
+Top level modules:
+	alu32
+
+} {} {}} E:/Project_332/datapath.v {1 {vlog -work work -stats=none E:/Project_332/datapath.v
+Model Technology ModelSim - Intel FPGA Edition vlog 2020.1 Compiler 2020.02 Feb 28 2020
+-- Compiling module adder
+-- Compiling module FA
+-- Compiling module alu32
+-- Compiling module flopr_param
+-- Compiling module mux2
+-- Compiling module mux4
+-- Compiling module registerfile32
+-- Compiling module signext
+-- Compiling module slt2
+-- Compiling module Datapath
+
+Top level modules:
+	mux4
+	Datapath
+
+} {} {}}

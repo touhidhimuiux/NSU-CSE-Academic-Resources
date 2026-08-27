@@ -1,0 +1,384 @@
+m255
+K4
+z2
+!s11f vlog 2020.1 2020.02, Feb 28 2020
+13
+!s112 1.1
+!i10d 8192
+!i10e 25
+!i10f 100
+cModel Technology
+dC:/intelFPGA/20.1
+vadder
+Z0 !s110 1756282446
+!i10b 1
+!s100 POdD8SeL7hLzOOf0@VaNZ2
+Z1 !s11b Dg1SIo80bB@j0V0VzS_@n1
+IRjjkiVk>]`EGOM8T?Ode?1
+Z2 VDg1SIo80bB@j0V0VzS_@n1
+Z3 dE:/Project_332
+Z4 w1705214447
+Z5 8adder.v
+Z6 Fadder.v
+!i122 21
+L0 6 16
+Z7 OV;L;2020.1;71
+r1
+!s85 0
+31
+Z8 !s108 1756282446.000000
+Z9 !s107 control.v|rom.v|ram.v|sl2.v|signext.v|regfile32.v|mux4.v|mux2.v|flopr_param.v|alu32.v|adder.v|datapath.v|E:/Project_332/MIPS_SCP.v|
+Z10 !s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/MIPS_SCP.v|
+!i113 1
+Z11 o-work work
+Z12 tCvgOpt 0
+valu32
+R0
+!i10b 1
+!s100 ]gY<PLG=LjDkAF_C<ITl=0
+R1
+I<jCzYWLD;ShUb=76XE]eg2
+R2
+R3
+w1704775379
+8alu32.v
+Falu32.v
+!i122 21
+L0 6 29
+R7
+r1
+!s85 0
+31
+R8
+R9
+R10
+!i113 1
+R11
+R12
+vControlunit
+R0
+!i10b 1
+!s100 fNPdh5mIPVU:XIbgcglSJ1
+R1
+IbBWYJ@K5SVd>L;NWAYkUn0
+R2
+R3
+w1732865114
+8control.v
+Fcontrol.v
+!i122 21
+L0 7 119
+R7
+r1
+!s85 0
+31
+R8
+R9
+R10
+!i113 1
+R11
+R12
+n@controlunit
+vDatapath
+R0
+!i10b 1
+!s100 K9Rzd`FgikV?RaOn=1bF=3
+R1
+I__RLB^BST?YiZ=04f]15n3
+R2
+R3
+w1705215384
+8datapath.v
+Fdatapath.v
+!i122 21
+L0 15 43
+R7
+r1
+!s85 0
+31
+R8
+R9
+R10
+!i113 1
+R11
+R12
+n@datapath
+vdecoder4
+R0
+!i10b 1
+!s100 k1PDc_jh3bdPICKz6AkfC2
+R1
+INaHY?cJ?PZJ^meG=Ui0[<3
+R2
+R3
+w1704775437
+8E:/Project_332/decoder4.v
+FE:/Project_332/decoder4.v
+!i122 19
+L0 6 41
+R7
+r1
+!s85 0
+31
+R8
+!s107 E:/Project_332/decoder4.v|
+!s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/decoder4.v|
+!i113 1
+R11
+R12
+vFA
+R0
+!i10b 1
+!s100 H=jfXY22PJTHJQJ3=4<L=2
+R1
+I85UW]EN8NCzgQbPOdB`<`3
+R2
+R3
+R4
+R5
+R6
+!i122 21
+L0 23 5
+R7
+r1
+!s85 0
+31
+R8
+R9
+R10
+!i113 1
+R11
+R12
+n@f@a
+vflopr_param
+R0
+!i10b 1
+!s100 ==fG^OPB_[hTIdMzE4P=z3
+R1
+IZ7MKT3J:[OAFdj59goeck1
+R2
+R3
+w1704775476
+8flopr_param.v
+Fflopr_param.v
+!i122 21
+L0 6 13
+R7
+r1
+!s85 0
+31
+R8
+R9
+R10
+!i113 1
+R11
+R12
+vMIPS_SCP
+R0
+!i10b 1
+!s100 N]D8[;N4JXOWdiVRLgVm50
+R1
+IU73QXR0Qmi>OQk6CgcE:j1
+R2
+R3
+w1704775274
+8E:/Project_332/MIPS_SCP.v
+FE:/Project_332/MIPS_SCP.v
+!i122 21
+L0 11 21
+R7
+r1
+!s85 0
+31
+R8
+R9
+R10
+!i113 1
+R11
+R12
+n@m@i@p@s_@s@c@p
+vMIPS_SCP_tb
+R0
+!i10b 1
+!s100 jXmgakjYg:Zfm]M]nMYMT3
+R1
+IF9ANX3A_<fPLNlP1I@<0B2
+R2
+R3
+w1704792782
+8E:/Project_332/MIPS_SCP_tb.v
+FE:/Project_332/MIPS_SCP_tb.v
+!i122 22
+L0 6 28
+R7
+r1
+!s85 0
+31
+R8
+!s107 E:/Project_332/MIPS_SCP_tb.v|
+!s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/MIPS_SCP_tb.v|
+!i113 1
+R11
+R12
+n@m@i@p@s_@s@c@p_tb
+vmux2
+Z13 !s110 1756282447
+!i10b 1
+!s100 cKn3GS0^`?]:SEii3GNzJ1
+R1
+ISI`5^2:`B`I2aXCFJmRkV3
+R2
+R3
+w1704776184
+8E:/Project_332/mux2.v
+FE:/Project_332/mux2.v
+!i122 23
+L0 6 12
+R7
+r1
+!s85 0
+31
+Z14 !s108 1756282447.000000
+!s107 E:/Project_332/mux2.v|
+!s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/mux2.v|
+!i113 1
+R11
+R12
+vmux4
+R13
+!i10b 1
+!s100 K5ZiK[1HFMeGGATIz9djP2
+R1
+InK]Lhk[A9d172LDHK9z]i1
+R2
+R3
+w1704775545
+8E:/Project_332/mux4.v
+FE:/Project_332/mux4.v
+!i122 24
+Z15 L0 6 20
+R7
+r1
+!s85 0
+31
+R14
+!s107 E:/Project_332/mux4.v|
+!s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/mux4.v|
+!i113 1
+R11
+R12
+vram
+R13
+!i10b 1
+!s100 na^5<1XzE4<4CXhVFF[^H2
+R1
+IcZKWfkU3nD>YToQD:YaR;1
+R2
+R3
+w1756268974
+8E:/Project_332/ram.v
+FE:/Project_332/ram.v
+!i122 25
+L0 5 26
+R7
+r1
+!s85 0
+31
+R14
+!s107 E:/Project_332/ram.v|
+!s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/ram.v|
+!i113 1
+R11
+R12
+vregisterfile32
+R13
+!i10b 1
+!s100 UPaY0dJ8W7nOe;gZ1:dgo3
+R1
+IDokM0H]oE0_O42g_zS:2g2
+R2
+R3
+w1704776186
+8E:/Project_332/regfile32.v
+FE:/Project_332/regfile32.v
+!i122 26
+L0 6 34
+R7
+r1
+!s85 0
+31
+R14
+!s107 E:/Project_332/regfile32.v|
+!s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/regfile32.v|
+!i113 1
+R11
+R12
+vrom
+R13
+!i10b 1
+!s100 YDcXZ`46Zc`ZYgiE4Mo_P3
+R1
+IEZ3Hf36`EO2^NLB:[Uz2S2
+R2
+R3
+w1744098724
+8E:/Project_332/rom.v
+FE:/Project_332/rom.v
+!i122 27
+R15
+R7
+r1
+!s85 0
+31
+R14
+!s107 E:/Project_332/rom.v|
+!s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/rom.v|
+!i113 1
+R11
+R12
+vsignext
+R13
+!i10b 1
+!s100 ]O6EBlmRCeeaS6VEg0jFT1
+R1
+IHAAh4_AhUnm6BGRNloed@3
+R2
+R3
+w1704775668
+8E:/Project_332/signext.v
+FE:/Project_332/signext.v
+!i122 28
+L0 6 7
+R7
+r1
+!s85 0
+31
+R14
+!s107 E:/Project_332/signext.v|
+!s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/signext.v|
+!i113 1
+R11
+R12
+vslt2
+R13
+!i10b 1
+!s100 L`WcOzOS9d8K6WWdkoel<0
+R1
+I1lDMn:SSl?l>F7CP`U_?50
+R2
+R3
+w1704775892
+8E:/Project_332/sl2.v
+FE:/Project_332/sl2.v
+!i122 29
+L0 6 6
+R7
+r1
+!s85 0
+31
+R14
+!s107 E:/Project_332/sl2.v|
+!s90 -reportprogress|300|-work|work|-stats=none|E:/Project_332/sl2.v|
+!i113 1
+R11
+R12

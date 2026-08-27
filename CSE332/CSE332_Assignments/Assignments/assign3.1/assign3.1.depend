@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1741502870 source:f:\porashona\cse332.5\assignments\assign3.1\main.c
+	<stdio.h>
+	<stdlib.h>
+	<stdbool.h>
+
