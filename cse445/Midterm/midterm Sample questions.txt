@@ -1,0 +1,60 @@
+Mid Questions
+Loss
+1. What is a loss function, and why is it necessary for training a machine-learning model?
+2. Explain how the losses of individual training examples are combined to obtain the overall training loss.
+3. A regression model produces true values of 10, 6, and 4, while its predictions are 8, 7, and 1. Calculate the squared error for each prediction and the mean squared error.
+4. Why does squared-error loss penalize large prediction errors more strongly than small errors? Explain using suitable examples.
+5. What is the likelihood of a training dataset? Why is the likelihood calculated by multiplying the probabilities assigned to the observed outputs?
+6. Why is the logarithm applied to the likelihood during model training? Explain how log-likelihood simplifies computation and optimization.
+7. What is negative log-likelihood? Explain why maximizing likelihood is equivalent to minimizing negative log-likelihood.
+8. A binary classifier assigns probabilities of 0.80, 0.30, and 0.60 to three examples whose true labels are positive, negative, and positive, respectively. Calculate the cross-entropy loss.
+9. A neural network produces three scores: 2, 1, and 0. Convert these scores into class probabilities using the softmax function and identify the predicted class. If the true labels are negative positive, negative respectively, calculate cross entropy.
+
+
+Nearest Neighborhood Algorithm
+1. Explain the main assumption behind the k-nearest neighbors algorithm. Why should nearby examples have similar outputs?
+2. Why is k-nearest neighbors called an instance-based and lazy-learning algorithm? Compare its training process with that of a parametric model.
+3. Describe the four main steps used by k-nearest neighbors to classify a new data point.
+4. A new point has feature values 3 and 3. Three training points have feature values 2 and 2, 4 and 3, and 6 and 6. Calculate the Euclidean distance from the new point to each training point and identify the nearest neighbor.
+5. Explain the differences among Euclidean, Manhattan, and Minkowski distance. How can changing the distance metric change a model’s prediction?
+6. What is the effect of choosing a very small value of k? What is the effect of choosing a very large value of k? Discuss in terms of bias, variance, noise sensitivity, and decision-boundary smoothness.
+7. The five nearest neighbors of a test point have class labels A, B, A, A, and B. Determine the predicted class using majority voting. Explain how distance-weighted voting might produce a different result. How soft voting could work in this scenario?
+8. In a k-nearest neighbors regression problem, the three nearest neighbors have target values 80, 86, and 92. Calculate the predicted value. How would weighted regression change the influence of these neighbors?
+9. Explain why feature scaling is important for k-nearest neighbors. Use age and income as examples of features with different numerical ranges.
+10. Discuss the major limitations of k-nearest neighbors, including slow prediction, irrelevant features, high-dimensional data, feature scaling, and the choice of k. Suggest one practical solution for each limitation.
+
+
+Linear Classifiers
+1. What is a linear decision boundary in binary classification? Explain how a linear classifier uses the position of a data point relative to the boundary to assign a class label.
+2. A classifier uses a model: wx+b=0, where w = [2 1], b = -6. Determine the predicted class of the points with feature values [1 1], [2 3], and [4 0]. Treat a positive result as '+1' and a negative result as '-1'.
+3. A perceptron currently has w = [0 0] and b = 0. A positive training example with feature values [2 1] is misclassified. Using a learning rate of one, calculate the updated weights and bias.
+4. Describe the complete perceptron learning algorithm. Explain how it identifies a misclassified training example and how the model parameters are updated.
+5. State the condition under which the perceptron algorithm is guaranteed to converge. Why does this guarantee not apply when the training data are not linearly separable?
+6. A linearly separable dataset may have several possible separating boundaries. Explain why selecting the boundary with the maximum margin is more systematic than selecting an arbitrary boundary.
+7. The closest positive and negative training points lie on the positive-one and negative-one score boundaries. The length (norm) of the classifier weight vector is 5. Calculate the distance between the two margin boundaries.
+8. Explain the objective and constraints of a hard-margin support vector machine. What are support vectors, and why do they determine the final separating boundary?
+9. Explain why slack variables are required for data that are not linearly separable. Discuss the trade-off between maximizing the margin and penalizing classification violations.
+
+
+Logistic regression:
+1. What problem does logistic regression solve, and why is an ordinary linear regression output unsuitable for estimating class probabilities?
+2. What is the purpose of the squashing function in logistic regression? Explain how it converts an unrestricted model score into a valid probability.
+3. Describe how logistic regression predicts a binary class label after estimating the probability of the positive class.
+4. Explain the learning problem in logistic regression. What model parameters must be learned, and what is the objective of the learning process? How is it related to Negative Log Likehood estimation?
+5. Describe how gradient descent can be used to train a logistic regression model. What roles do the gradient and learning rate play during parameter updates?
+6. Design a logistic regression approach for sentiment classification. Describe the input representation, class labels, training process, and final prediction.
+
+
+
+Multiclass linear models:
+1. Binary classifiers such as logistic regression, perceptron, and support vector machines do not directly support multiclass classification. Explain how multiclass classification can be performed using binary classifiers.
+2. Describe the training and prediction procedures of the One-vs-Rest strategy. How is the final class selected for a new data point?
+3. Describe the training and prediction procedures of the One-vs-One strategy. Explain how voting is used to determine the final prediction.
+4. A classification problem contains five classes. Determine the number of binary classifiers required by: a. One-vs-Rest b. One-vs-One, Which strategy requires more classifiers?
+5. Compare One-vs-Rest and One-vs-One in terms of the number of classifiers, training data used by each classifier, prediction procedure, and suitability for problems with many classes.
+6. Explain how multiclass logistic regression assigns probabilities to multiple classes. How is the final predicted class selected?
+7. Describe the multiclass perceptron learning process. What happens when the model assigns a training example to an incorrect class?
+8. Why can a linear classifier fail when the classes have a nonlinear decision boundary? Explain how basis expansion can transform a nonlinear classification problem into a linear problem in a higher-dimensional feature space.
+9. A dataset has two original features, but its classes can only be separated using a quadratic boundary. Identify suitable additional quadratic features that could be introduced through basis expansion. Explain why the resulting boundary is linear in the expanded feature space.
+10. Explain the kernel trick and how it avoids explicitly computing expanded feature vectors. Compare kernel perceptron and kernel support vector machines in terms of their learning objectives, use of dot products, and treatment of the classification margin.
+

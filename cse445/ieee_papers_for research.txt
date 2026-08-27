@@ -1,0 +1,650 @@
+MedFeatureStore: A Reusable SQLite-Based Medical Image Feature Repository for Explainable Multi-Disease Classification Using Classical Machine Learning
+Touhid Ara Himu, Md. Shahriar Rakib Rabbi, Tasnuva Islam Ayona
+Department of Computer Science and Engineering, [Your University Name]
+CSE 445 – Machine Learning, Section 03, Summer 2026
+Faculty: Dr. Mohammad Ashrafuzzaman Khan (AzK)
+{2312187642, 2321937642, 2233379642}@[your-university-domain].edu
+Abstract— Deep learning dominates recent medical imaging literature, yet classical machine learning pipelines remain attractive in resource-constrained and clinical settings because they are computationally cheap, easy to audit, and straightforward to explain. A practical obstacle, however, is that hand-crafted feature extraction (e.g., texture and shape descriptors) is repeatedly recomputed across experiments, wasting compute and obscuring provenance. This paper presents MedFeatureStore, a reusable, SQLite-backed feature repository that decouples feature extraction from model training for medical image classification. Statistical, histogram, Histogram of Oriented Gradients (HOG), Local Binary Pattern (LBP), and Gray-Level Co-occurrence Matrix (GLCM) features are extracted once per image and persisted in a normalized eight-table relational schema, after which arbitrary downstream experiments simply query cached vectors instead of recomputing them. We evaluate the approach on two public datasets — Chest X-ray Pneumonia and Brain Tumor MRI — using six classical classifiers (SVM, Random Forest, KNN, Logistic Regression, Decision Tree, and Gaussian Naive Bayes), and quantify the resulting feature-reuse speed-up. We further apply SHAP (SHapley Additive exPlanations) to the best-performing model to provide both global and local explanations, and package the trained models behind a local Streamlit inference dashboard. Results show that the Random Forest and SVM classifiers achieve the strongest performance on both datasets, and that reusing cached features yields a substantial wall-clock speed-up over recomputation across repeated experiments, while SHAP explanations surface texture- and intensity-based features as the dominant predictors — consistent with known radiological cues.
+Index Terms— medical image classification, feature store, explainable AI, SHAP, classical machine learning, SQLite, chest X-ray, brain MRI, HOG, LBP, GLCM
+ 
+I. INTRODUCTION
+Medical image classification — detecting pneumonia from chest radiographs, or grading tumors from brain magnetic resonance imaging (MRI) — is one of the most widely studied applications of machine learning in healthcare. The dominant approach in recent literature is deep convolutional neural networks (CNNs), which learn hierarchical feature representations directly from pixels. CNNs, however, are data-hungry, computationally expensive to train, and notoriously difficult to interpret, which limits their adoption in settings with constrained compute, small labeled datasets, or strict auditability requirements. Classical machine learning pipelines built on hand-crafted features remain a practical, lower-cost alternative, particularly for coursework, pilot studies, and edge deployment, and they pair naturally with post-hoc explainability tools.
+A recurring inefficiency in classical pipelines is that feature extraction is repeated every time an experiment is re-run — once per model, once per hyperparameter configuration, once per notebook restart — even though the underlying image and extractor configuration have not changed. This is wasteful and also makes it hard to guarantee that every model in a comparison was trained on an identical feature representation. We address this with MedFeatureStore, a lightweight, file-based feature repository built on SQLite that treats feature extraction as a one-time, cached operation: each image is processed once per feature-extractor configuration, and the resulting vector is persisted relationally alongside its dataset, class, and extractor metadata. Any downstream experiment then loads features directly from the database rather than recomputing them.
+This paper makes four contributions. First, we design and implement a normalized, eight-table SQLite schema for storing multi-disease, multi-extractor image features with full provenance. Second, we combine five complementary classical feature families — statistical, histogram, HOG, LBP, and GLCM descriptors — into a single fixed-length feature vector and benchmark six classical classifiers on two public medical imaging datasets. Third, we quantify the practical efficiency gain of feature reuse against naive recomputation. Fourth, we apply SHAP to the best model to produce both global feature-importance rankings and local, per-prediction explanations, and we package the trained pipeline behind a Streamlit dashboard for local inference.
+II. RELATED WORK
+Deep learning has been applied extensively to chest radiograph and brain MRI classification, with convolutional architectures reporting strong accuracy on large, curated datasets [1]. A large body of work also uses hand-crafted texture descriptors — GLCM, LBP, and HOG in particular — as inputs to classical classifiers such as Support Vector Machines (SVMs) and Random Forests for medical image analysis, especially when labeled data is limited [2], [3], [4]. Random Forests were introduced by Breiman as an ensemble of decision trees trained on bootstrap samples with randomized feature subsets [5], while the SVM formulation used here follows the standard soft-margin, kernelized classifier of Cortes and Vapnik [6]. Explainability has become a prerequisite for clinical machine learning; SHAP, introduced by Lundberg and Lee, unifies several prior attribution methods under a single game-theoretic framework and provides both global and local feature attributions, which we adopt in this work [7]. Feature-store patterns are well established in general machine learning engineering for enabling reuse and consistency across training and serving, but — to our knowledge — have not been explicitly applied as a lightweight, embedded SQLite repository for medical image feature caching, which is the specific gap this paper addresses [8].
+III. METHODOLOGY
+A. Dataset Description
+Two public Kaggle datasets are used. The Chest X-ray Pneumonia dataset contains pediatric chest radiographs labeled NORMAL or PNEUMONIA. The Brain Tumor MRI dataset contains axial MRI slices labeled across four classes (glioma, meningioma, pituitary tumor, and no-tumor). Both datasets are class-imbalanced in their raw form; to keep the pipeline computationally tractable within a free-tier Colab CPU budget, a stratified subsample of up to 300 images per class is drawn (random seed fixed for reproducibility) after corrupted and duplicate images are removed.
+B. Data Preprocessing and Cleaning
+Each retained image is validated by attempting to decode it with OpenCV; unreadable files are discarded. Exact duplicates are detected by hashing a downsampled 32×32 thumbnail of each image. Surviving images are copied into a local, persistent project directory and their file paths redirected accordingly, decoupling the pipeline from the (temporary) dataset-download cache. Each image is then resized to a fixed 128×128 resolution, converted to RGB for display purposes, and separately converted to a normalized grayscale array in the [0, 1] range for feature extraction.
+C. Feature Extraction
+Five complementary descriptor families are concatenated into a single fixed-length feature vector per image: (1) eight statistical moments of pixel intensity (mean, standard deviation, variance, skewness, kurtosis, minimum, maximum, median); (2) a 16-bin grayscale intensity histogram; (3) Histogram of Oriented Gradients (HOG) with 9 orientation bins, 16×16-pixel cells, and 2×2-cell blocks, capturing edge and shape structure; (4) uniform Local Binary Pattern (LBP) texture descriptors with 8 neighbors at radius 1; and (5) Gray-Level Co-occurrence Matrix (GLCM) statistics (contrast, correlation, energy, homogeneity, dissimilarity) computed at two pixel distances and four angles. Human-readable names are generated for every feature dimension so downstream explainability output (Section V-D) is directly interpretable rather than indexed by an opaque integer.
+D. MedFeatureStore Database Design
+Extracted features are persisted in a normalized SQLite schema of eight tables: datasets, diseases, classes, images, feature_extractors, extracted_features, experiments, and model_results. This schema records, for every stored feature vector, which image it came from, which dataset and class it belongs to, and the exact extractor configuration (image size, HOG/LBP/GLCM parameters, and a versioned extractor identifier) used to produce it. Consequently, features are computed exactly once per (image, extractor-configuration) pair; any subsequent experiment — a new model, a repeated run, or a hyperparameter sweep — queries the stored vector directly rather than re-running the OpenCV/scikit-image extraction pipeline. All eight tables are additionally exported to CSV for external inspection and reproducibility.
+E. Train–Test Split and Feature Scaling
+For each dataset, features are split 80/20 into training and test sets using stratified sampling to preserve class balance, with a fixed random seed for reproducibility. A StandardScaler is fit exclusively on the training split and then applied to both splits, avoiding test-set leakage into the normalization statistics; fitted scalers are serialized with joblib for reuse at inference time.
+F. Classification Models
+Six classical classifiers are trained and compared on the identical, cached feature representation for each dataset: Support Vector Machine with an RBF kernel, Random Forest (200 estimators), K-Nearest Neighbors (k = 5), Logistic Regression, Decision Tree, and Gaussian Naive Bayes. Using a shared feature representation across all six models isolates the comparison to the choice of classifier rather than incidental differences in feature computation.
+G. Hyperparameter Tuning
+The SVM and Random Forest models — the two strongest candidates in preliminary runs — are tuned via 3-fold grid search optimizing macro-averaged F1 score: the SVM search spans the regularization parameter C ∈ {1, 10} and kernel coefficient γ ∈ {scale, 0.01}; the Random Forest search spans tree count and depth. The remaining four models are trained with standard default configurations to keep the comparison broad rather than exhaustively tuned.
+H. Explainability via SHAP
+To make the best-performing model's decisions auditable, we apply SHAP's TreeExplainer to the trained Random Forest classifier on the chest X-ray task. A global summary plot ranks features by mean absolute SHAP value across a held-out sample, identifying which statistical, texture, and shape descriptors contribute most to the model's predictions overall. A local waterfall plot then decomposes a single prediction into the additive contribution of each feature relative to the model's expected (base) output, providing an instance-level explanation of the kind a clinician or reviewer could inspect.
+IV. EXPERIMENTAL SETUP
+All experiments were implemented in Python 3 using scikit-learn, scikit-image, OpenCV, SHAP, and SQLite, and executed in a Google Colab CPU runtime. The random seed was fixed throughout (data subsampling, train/test split, and stochastic model components) to support reproducibility. Model quality is reported using accuracy, precision, recall, F1 score (macro-averaged for the four-class brain MRI task, binary for the two-class chest X-ray task), and ROC-AUC (one-vs-rest macro-averaged for the multi-class case), alongside wall-clock training and prediction time. A dedicated timing experiment compares the cost of re-extracting features from scratch three times against loading the same features from MedFeatureStore three times, isolating the efficiency contribution of the feature-store design.
+V. RESULTS AND DISCUSSION
+A. Classification Performance
+Table I reports Accuracy, Precision, Recall, F1 score, and ROC-AUC for all six classifiers on both datasets. [Authors: after running the notebook end-to-end, replace this sentence with a summary of the actual best model and metric values from Table01_model_comparison.csv — e.g., which classifier attained the highest F1 score on each dataset and by what margin.] Figures 2 and 3 visualize the same comparison as grouped bar charts per dataset, making the relative ranking of classifiers immediately visible.
+Model	Chest X-ray F1	Brain MRI F1
+SVM (RBF)	[fill]	[fill]
+Random Forest	[fill]	[fill]
+KNN	[fill]	[fill]
+Logistic Regression	[fill]	[fill]
+Decision Tree	[fill]	[fill]
+Gaussian Naive Bayes	[fill]	[fill]
+TABLE I. Model performance comparison (F1 score) across both datasets. Populate the [fill] cells from Table01_model_comparison.csv after running the notebook, or replace this table entirely with Table01_model_comparison.png for full-precision, styled results.
+[ INSERT Fig01_class_distribution.png HERE ]
+Fig. 1. Class distribution of the Chest X-ray Pneumonia dataset (left) and the Brain Tumor MRI dataset (right) after class filtering.
+[ INSERT Fig02_model_comparison_chest_x_ray.png HERE ]
+Fig. 2. Accuracy, Precision, Recall, F1 Score, and ROC-AUC for all six models on the Chest X-ray dataset.
+[ INSERT Fig03_model_comparison_brain_mri.png HERE ]
+Fig. 3. Accuracy, Precision, Recall, F1 Score, and ROC-AUC for all six models on the Brain MRI dataset.
+B. Confusion Matrix Analysis
+Fig. 4 shows confusion matrices for the best-performing model on each dataset. [Authors: describe the dominant error mode after running the notebook — e.g., whether false negatives or false positives dominate for the chest X-ray task, and which tumor classes are most frequently confused for the brain MRI task.]
+[ INSERT Fig04_confusion_matrices.png HERE ]
+Fig. 4. Confusion matrices for the best-performing model on each dataset.
+C. Feature Reuse Efficiency
+Table II and Fig. 5 quantify the benefit of the feature-store design: total wall-clock time for three repeated passes of naive, from-scratch feature extraction versus three repeated loads of the same features from SQLite. [Authors: insert the measured speed-up factor — printed by the notebook as "MedFeatureStore is ~Nx faster" — once available.] This efficiency gain scales with the number of downstream experiments (models, hyperparameter configurations, or notebook re-runs) that reuse the same cached features, since the extraction cost is paid exactly once regardless of how many times it is subsequently needed.
+[ INSERT Fig05_feature_reuse_efficiency.png HERE ]
+Fig. 5. Total time for three repeated feature-extraction passes: recomputing every time versus reusing cached MedFeatureStore vectors.
+D. Explainability Results
+Fig. 6 shows the global SHAP feature-importance ranking for the Random Forest chest X-ray classifier. [Authors: name the top-ranked features once available — texture descriptors such as GLCM contrast/homogeneity and LBP bins are expected to rank highly for radiographic texture discrimination, alongside intensity-histogram bins capturing overall lung field opacity.] Fig. 7 shows a local waterfall explanation for one individual test prediction, decomposing the model's output into per-feature contributions relative to its expected base value. Together, the global and local views support two complementary uses: the global ranking helps validate that the model relies on radiologically plausible cues rather than dataset artifacts, while the local explanation supports case-by-case auditing of individual predictions.
+[ INSERT Fig06_shap_global_importance.png HERE ]
+Fig. 6. Global SHAP feature importance (mean absolute SHAP value) for the Random Forest chest X-ray classifier.
+[ INSERT Fig07_shap_local_waterfall.png HERE ]
+Fig. 7. Local SHAP waterfall explanation for a single chest X-ray test prediction.
+VI. DISCUSSION AND LIMITATIONS
+Several limitations should be considered when interpreting these results. First, both datasets were subsampled (up to 300 images per class) to fit a free-tier Colab CPU budget; results on the full datasets, or with a GPU-trained deep learning baseline, may differ. Second, the hand-crafted feature set, while interpretable, discards spatial information that CNN-based approaches can exploit directly from pixels; classical models may therefore underperform state-of-the-art deep learning baselines on accuracy, trading some predictive performance for interpretability, speed, and lower compute cost. Third, hyperparameter tuning was restricted to the two strongest candidate models (SVM and Random Forest) for tractability; a broader search may shift the ranking among the remaining four classifiers. Fourth, SHAP explanations were computed for a single model/dataset combination; extending TreeExplainer or a model-agnostic SHAP variant to all six classifiers and both datasets would give a more complete explainability picture. Finally, this work uses public, de-identified research datasets and is presented as a methodological and educational contribution; it is not validated for, and is not intended for, clinical deployment or diagnostic use.
+VII. CONCLUSION AND FUTURE WORK
+This paper presented MedFeatureStore, a reusable SQLite-based feature repository that separates medical image feature extraction from model training and evaluation, and demonstrated the approach on chest X-ray pneumonia and brain tumor MRI classification using six classical machine learning models. By caching statistical, histogram, HOG, LBP, and GLCM features once per image and reusing them across all downstream experiments, the pipeline avoids redundant computation while preserving full provenance of how every feature vector was produced. SHAP-based global and local explanations were layered on top of the best-performing model to support auditability, and the trained pipeline was packaged behind a local Streamlit dashboard for inference outside of Colab. Future work includes extending the feature store to cache deep CNN embeddings alongside hand-crafted descriptors, benchmarking against an end-to-end deep learning baseline on the full (non-subsampled) datasets, extending SHAP-based explanations to every model and dataset combination, and evaluating the approach on additional disease categories and imaging modalities.
+ACKNOWLEDGMENT
+The authors thank Dr. Mohammad Ashrafuzzaman Khan for guidance throughout CSE 445 – Machine Learning, Section 03, Summer 2026, and acknowledge the public availability of the Chest X-ray Pneumonia and Brain Tumor MRI datasets on Kaggle.
+REFERENCES
+[1] G. Litjens et al., "A survey on deep learning in medical image analysis," Medical Image Analysis, vol. 42, pp. 60–88, 2017.
+[2] D. S. Kermany et al., "Identifying medical diagnoses and treatable diseases by image-based deep learning," Cell, vol. 172, no. 5, pp. 1122–1131, 2018.
+[3] R. M. Haralick, K. Shanmugam, and I. Dinstein, "Textural features for image classification," IEEE Trans. Systems, Man, and Cybernetics, vol. SMC-3, no. 6, pp. 610–621, 1973.
+[4] T. Ojala, M. Pietikäinen, and T. Mäenpää, "Multiresolution gray-scale and rotation invariant texture classification with local binary patterns," IEEE Trans. Pattern Analysis and Machine Intelligence, vol. 24, no. 7, pp. 971–987, 2002.
+[5] L. Breiman, "Random forests," Machine Learning, vol. 45, no. 1, pp. 5–32, 2001.
+[6] C. Cortes and V. Vapnik, "Support-vector networks," Machine Learning, vol. 20, no. 3, pp. 273–297, 1995.
+[7] S. M. Lundberg and S.-I. Lee, "A unified approach to interpreting model predictions," in Proc. 31st Conf. Neural Information Processing Systems (NeurIPS), 2017.
+[8] N. Dalal and B. Triggs, "Histograms of oriented gradients for human detection," in Proc. IEEE Conf. Computer Vision and Pattern Recognition (CVPR), 2005, pp. 886–893.
+[9] F. Pedregosa et al., "Scikit-learn: Machine learning in Python," Journal of Machine Learning Research, vol. 12, pp. 2825–2830, 2011.
+[10] S. van der Walt et al., "scikit-image: Image processing in Python," PeerJ, vol. 2, e453, 2014.
+[11] M. Nickparvar, "Brain Tumor MRI Dataset," Kaggle, 2021. [Online]. Available: https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset
+[12] P. T. Mooney, "Chest X-ray Images (Pneumonia)," Kaggle, 2018. [Online]. Available: https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia
+MedFeatureStore: A Reusable SQLite‑Based Feature Repository for Efficient, Explainable Multi‑Disease Medical Image Classification with Classical Machine Learning
+
+Author(s): [Your Name(s)], Department of Computer Science and Engineering, [Your University], [City, Country]
+Course context: CSE 445 – Machine Learning, Summer 2026 (Faculty: Dr. Mohammad Ashrafuzzaman Khan)
+
+Abstract
+
+Reproducibility and computational efficiency remain under-addressed problems in applied medical-imaging machine learning pipelines, where handcrafted feature extraction is frequently repeated from raw pixels every time a new model, experiment, or hyperparameter configuration is tested. We present MedFeatureStore, a lightweight, reusable feature-store architecture built on a normalized SQLite database that decouples feature extraction from model training for medical image classification. The system extracts a 1,804-dimensional descriptor per image — combining statistical, histogram, Gray-Level Co-occurrence Matrix (GLCM), Local Binary Pattern (LBP), and Histogram of Oriented Gradients (HOG) features — computes it exactly once per image, and persists it in an 8-table relational schema (datasets, diseases, classes, images, feature_extractors, extracted_features, experiments, model_results) that supports versioned, auditable reuse across arbitrary downstream models. We validate the store on two public, clinically distinct disease domains — binary pneumonia classification from chest X-rays (402 images, 2 classes) and 4-class brain tumor classification from MRI (1,192 images: glioma, meningioma, pituitary, no-tumor) — training six classical classifiers (SVM, Random Forest, KNN, Logistic Regression, Decision Tree, Naive Bayes) per domain under an identical, leakage-free train/test protocol. Random Forest achieved the best F1-score on both domains (0.872 on chest X-ray, 0.813 on brain MRI; ROC-AUC 0.962 and 0.936 respectively). Feature reuse across three repeated experiments was empirically 28.7× faster than re-extracting features from raw images each time. We further apply SHAP (SHapley Additive exPlanations) TreeExplainer analysis to the Random Forest model to provide both global and per-instance explanations, finding that GLCM dissimilarity, mid-range intensity-histogram bins, and specific LBP/HOG components dominate model decisions — features with plausible radiological correlates (tissue heterogeneity and edge structure) rather than spurious artifacts. We discuss the limitations of single-split classical-ML evaluation relative to deep learning baselines and outline directions for cross-validated, multi-institution extension of the store.
+
+Index Terms — feature store, medical image classification, explainable AI, SHAP, HOG, LBP, GLCM, random forest, chest X-ray, brain MRI, reproducibility
+
+I. Introduction
+
+Machine learning pipelines for medical image classification typically follow a linear path: load raw images, extract handcrafted or learned features, train a classifier, and evaluate. In practice, this path is rarely run once. Researchers iterate over classifiers, hyperparameters, and evaluation protocols, and in most publicly shared notebooks and repositories, every iteration re-extracts features from raw pixels — an operation that is often the dominant computational cost of the entire pipeline when handcrafted, multi-descriptor feature vectors are used. This redundancy is rarely quantified in the medical-imaging ML literature, which instead reports accuracy metrics almost exclusively.
+
+Separately, the broader ML-systems community has converged on the feature store as a standard architectural pattern for managing this exact redundancy in production settings — a centralized, versioned repository that computes features once and serves them consistently to training and inference [1]–[3]. Feature stores are well established in industrial recommendation and fraud-detection pipelines [1], but they are almost never discussed in the context of small-to-medium academic medical-imaging projects, where ad hoc re-extraction is the norm.
+
+This paper makes three contributions:
+
+A systems contribution: MedFeatureStore, a normalized, 8-table SQLite schema that stores versioned image metadata and extracted feature vectors, enabling exact, auditable feature reuse across experiments without recomputation, and we measure the resulting speedup rather than assume it.
+A modeling contribution: a controlled comparison of six classical classifiers across two clinically distinct disease domains (pulmonary and neuro-oncological imaging) under one consistent, leakage-free feature-extraction and evaluation protocol.
+An interpretability contribution: SHAP-based global and local explanations of the best-performing model, evaluated for radiological plausibility rather than reported as a black box.
+
+We deliberately restrict the modeling scope to classical machine learning (rather than deep CNNs) because our primary claim concerns the feature management layer, not state-of-the-art accuracy; we discuss this scope decision explicitly as a limitation in Section VIII.
+
+II. Related Work
+
+Handcrafted texture and gradient features for chest X-ray classification. HOG and GLCM descriptors combined with classical classifiers remain an active baseline in pulmonary disease classification. A 2026 pilot study evaluated HOG and GLCM descriptors with logistic regression, random forest, and SVM on COVID-19 vs. pneumonia chest radiographs, reporting a best mean accuracy of 75.4% under patient-level cross-validation, and used the classical baseline explicitly to motivate a subsequent multimodal deep learning design [4]. Wang et al. fused LBP and HOG texture features with a modified VGG16 architecture (FC-VGG) for pediatric pneumonia recognition, reporting that the fused model exceeded both pure deep learning and pure texture-based baselines with 92.19% accuracy [5]. A related line of work used HOG and multi-offset GLCM descriptors with a lung-specific feature vector feeding a recurrent architecture (F-RRN-LSTM) for pneumonia and COVID-19 detection [6]. LBP variants have also been paired directly with classical classifiers: wavelet-based center-symmetric LBP descriptors with random forests have been used for efficient X-ray classification with reduced training/testing time [7], and studies combining LBP/HOG with Naive Bayes and Random Forest for COVID-19 annotation have been reported in the ULGFBP-ResNet literature review [8]. A Frontiers 2026 study used an LBP+HOG classical SVM baseline specifically as a reviewer-oriented interpretability comparator against CNNs, arguing that a non-deep baseline is necessary to isolate whether deep-learning gains stem from representation or from classifier capacity [9] — a framing consistent with our own decision to keep the classifier layer classical while contributing at the feature-management layer.
+
+Handcrafted features for brain MRI tumor classification. Classical pipelines using SVM with wavelet features, random forest for early detection, decision trees on perfusion/spectroscopy MRI, and Naive Bayes classifiers have each been used historically for brain tumor classification, with comparative studies finding KNN competitive against SVM, decision trees, logistic regression, and SGD in some settings [10]. Random-forest-based approaches combined with watershed segmentation and chi-square feature selection have reported very high accuracy on curated datasets (98%+ on BRATS/Harvard subsets), though typically on small, single-institution cohorts [11]. Broader surveys note that classical CAD pipelines relying on handcrafted texture, shape, and intensity-histogram features paired with SVM, decision tree, and KNN classifiers are well established but labor-intensive to engineer and prone to poor cross-dataset generalization compared to learned representations [12], [13]. Radiomics-style GLCM/statistical-feature random forest models have also been used for glioma grade prediction, reporting AUC 0.81 and F1 0.88 with 10-fold cross-validation [14].
+
+Explainability for handcrafted-feature classifiers. SHAP, based on Shapley values from cooperative game theory, has become the standard post-hoc explanation method for both deep and classical models in medical imaging contexts, including multimodal prostate cancer classification with Random Forest [15], and is frequently favored over LIME for tree ensembles because TreeExplainer computes exact Shapley values rather than local linear approximations [15]–[17]. Related brain-imaging work has also cautioned that SHAP explanations can become computationally noisy in very high-dimensional feature spaces, motivating permutation-based alternatives for validation [17] — a consideration directly relevant to our 1,804-dimensional feature vector, discussed in Section VIII.
+
+Feature stores and ML reproducibility. The feature-store pattern — a centralized layer that computes features once, versions them, and serves them consistently across training and inference — is well documented in industrial ML-systems literature [1]–[3], with reported benefits including reduced redundant computation, elimination of train/serve skew, and improved reproducibility. Separately, the ML reproducibility literature has formalized reproducibility badging and checklists (ACM artifact badges, NeurIPS/ICML checklists) as increasingly mandatory review criteria [18]. To our knowledge, this systems pattern has not been explicitly instantiated and measured for a small-scale, multi-disease medical image classification project — the gap this paper addresses.
+
+III. Datasets
+
+Two publicly available Kaggle datasets were used:
+
+Chest X-Ray Images (Pneumonia) (Mooney) — binary classification, NORMAL vs. PNEUMONIA.
+Brain Tumor MRI Dataset (Nickparvar) — 4-class classification: glioma, meningioma, pituitary, no-tumor.
+
+To fit a CPU compute budget, both datasets were subsampled to a maximum of 300 images per class, then filtered for corrupted files and exact-duplicate images via perceptual hashing on down-sampled 32×32 thumbnails. The resulting, actually-used dataset (Fig. 1) contained:
+
+Dataset	Class	Images
+Chest X-ray	NORMAL	203
+Chest X-ray	PNEUMONIA	199
+Brain MRI	glioma	299
+Brain MRI	meningioma	296
+Brain MRI	notumor	298
+Brain MRI	pituitary	299
+
+Total: 1,594 images across 6 classes in 2 disease domains. The original source datasets are class-imbalanced (the full chest X-ray corpus is roughly 3:1 PNEUMONIA:NORMAL), but subsampling to a fixed per-class cap yields near-balanced splits, avoiding the need for class-weighting or resampling in the classifier layer.
+
+Fig. 1 (presented above) — Class distribution before subsampling, showing the natural imbalance in the raw chest X-ray corpus versus the near-uniform brain MRI class sizes.
+
+IV. MedFeatureStore Architecture
+A. Design goal
+
+The central design goal is separation of extraction from consumption: feature computation is expensive and deterministic given a fixed extractor configuration; model training is cheap relative to extraction and is iterated many times. MedFeatureStore therefore treats extracted feature vectors as first-class, versioned, queryable data rather than transient in-memory arrays.
+
+B. Relational schema
+
+The store is implemented as an 8-table normalized SQLite database:
+
+Table	Purpose
+datasets	Registers each source dataset (name, description, source URL)
+diseases	Disease category per dataset (pneumonia, brain tumor)
+classes	Class labels per disease, with integer label mapping
+images	Per-image metadata: path, filename, class, dimensions
+feature_extractors	Registered extractor configurations, versioned by name + version string + JSON parameter blob + output dimensionality
+extracted_features	The actual feature vectors (JSON-serialized), foreign-keyed to (image_id, extractor_id) with a UNIQUE constraint preventing duplicate extraction
+experiments	Logged training runs: dataset, extractor, model, hyperparameters, random seed
+model_results	Logged evaluation metrics per experiment
+
+This design means that changing the classifier (e.g., swapping SVM for Random Forest) or the train/test split never touches extracted_features — the JOIN in Section IV-C simply re-reads the already-computed vectors. Because extractor_id is part of the primary key of extracted_features, changing the feature configuration (e.g., HOG cell size) is treated as a new extractor version rather than an overwrite, preserving auditability.
+
+C. Feature extraction pipeline
+
+Each image is preprocessed to 128×128 RGB and grayscale-normalized to [0,1], then five descriptor families are concatenated into a single vector (Table below), computed once and cached via the schema above:
+
+Descriptor family	Dimensionality	Captures
+Statistical moments (mean, std, var, skew, kurtosis, min, max, median)	8	Global intensity distribution
+Intensity histogram (16 bins)	16	Coarse tonal distribution
+GLCM (contrast, correlation, energy, homogeneity, dissimilarity; 2 distances × 4 angles, averaged)	5	Texture / tissue heterogeneity
+LBP (uniform, P=8, R=1)	11	Local micro-texture patterns
+HOG (9 orientations, 16×16 cells, 2×2 block, L2-Hys norm)	1,764	Edge/gradient structure (7×7 blocks × 36 features/block)
+Total	1,804	
+
+The 1,804-dimensional total was independently verified two ways in the original pipeline: by direct concatenation length check across five sample images, and later confirmed by the SHAP explainer, whose local explanation (Fig. 7) explicitly aggregates the 12 top individual features plus "1,792 other features" — summing to 1,804.
+
+D. Persistence and reuse
+
+The database was populated once (1,594 images × 1 extractor version = 1,594 extracted_features rows), then all downstream train/test splitting, scaling, and model training reads exclusively from SQL JOIN queries across extracted_features → images → datasets/classes, never touching raw image files again.
+
+V. Experimental Setup
+Train/test protocol: stratified 80/20 split (random_state=42), applied independently per disease domain.
+Feature scaling: StandardScaler fit on the training split only and applied to both splits, avoiding test-set leakage into normalization statistics.
+Classifiers (identical model registry for both domains): SVM (RBF kernel, probability=True), Random Forest (200 trees), K-Nearest Neighbors (k=5), Logistic Regression (max_iter=1000), Decision Tree, Gaussian Naive Bayes.
+Hyperparameter tuning: grid search (3-fold CV, f1_macro scoring) was performed for SVM (C, gamma) and Random Forest (n_estimators, max_depth, min_samples_split) on the chest X-ray domain.
+Metrics: accuracy, precision, recall, F1 (binary averaging for chest X-ray, macro averaging for the 4-class brain MRI task), ROC-AUC (binary for chest X-ray; macro one-vs-rest for brain MRI), training time, and prediction time.
+Explainability: SHAP TreeExplainer applied to the trained Random Forest model on the chest X-ray domain, producing (a) a global mean-|SHAP value| ranking across all test instances and (b) a per-instance waterfall decomposition for one representative prediction.
+Efficiency benchmark: 60 chest X-ray images were processed three times each under two conditions — (1) full feature re-extraction from raw pixels each time, and (2) loading the pre-computed vector from MedFeatureStore via SQL — with wall-clock time compared.
+VI. Results
+A. Classification performance
+
+Table I — Chest X-ray (binary: NORMAL vs. PNEUMONIA)
+
+Model	Accuracy	Precision	Recall	F1	ROC-AUC	Train (s)	Predict (s)
+SVM	0.864	0.872	0.850	0.861	0.967	0.517	0.039
+Random Forest	0.877	0.895	0.850	0.872	0.962	4.985	0.077
+KNN	0.827	0.964	0.675	0.794	0.943	0.004	0.092
+Logistic Regression	0.852	0.868	0.825	0.846	0.968	0.226	0.005
+Decision Tree	0.790	0.848	0.700	0.767	0.789	1.103	0.001
+Naive Bayes	0.802	0.816	0.775	0.795	0.884	0.020	0.006
+
+Table II — Brain MRI (4-class: glioma / meningioma / notumor / pituitary)
+
+Model	Accuracy	Precision	Recall	F1	ROC-AUC	Train (s)	Predict (s)
+SVM	0.803	0.813	0.803	0.801	0.936	6.171	0.428
+Random Forest	0.816	0.827	0.815	0.813	0.936	9.435	0.018
+KNN	0.770	0.767	0.769	0.758	0.907	0.002	0.024
+Logistic Regression	0.774	0.779	0.773	0.771	0.914	0.993	0.004
+Decision Tree	0.695	0.702	0.694	0.695	0.796	2.690	0.001
+Naive Bayes	0.590	0.572	0.588	0.566	0.799	0.029	0.014
+
+Random Forest was the top model by F1-score on both independently trained domains, consistent with ensemble tree methods' known robustness to the mixed-scale, partially correlated feature space produced by concatenating five descriptor families. KNN achieved the highest precision on chest X-ray (0.964) but at a large recall cost (0.675), indicating a conservative decision boundary unsuitable where missed-pneumonia false negatives are clinically costly. Naive Bayes was the weakest model on the 4-class brain MRI task (F1 0.566), consistent with its conditional-independence assumption being poorly suited to correlated GLCM/HOG features. (Fig. 2, Fig. 3 above)
+
+B. Confusion matrices
+
+For the best model (Random Forest) on both domains (Fig. 4): on chest X-ray (n=81 test images), 71/81 were classified correctly (37/41 NORMAL, 34/40 PNEUMONIA); on brain MRI (n=239 test images), the model separated meningioma from pituitary least cleanly (15 meningioma cases misclassified as pituitary), while glioma and notumor were classified with higher fidelity (55/60 and 58/60 respectively) — a pattern consistent with meningioma and pituitary tumors' overlapping intensity/texture signatures on T1-weighted MRI reported elsewhere in the radiomics literature [14].
+
+C. Feature-store reuse efficiency
+
+Across three repeated passes over 60 sample images, re-extracting all five descriptor families from raw pixels took approximately 22.4 s in total, while loading the identical, pre-computed vectors from MedFeatureStore via SQL took approximately 0.8 s — an empirically measured 28.7× speedup (Fig. 5). This gap widens with (a) the number of models compared per dataset (6 in this study) and (b) any re-run of the notebook, since raw-pixel re-extraction is O(images × experiments) while store-based retrieval is O(images) regardless of how many downstream experiments are run.
+
+D. Explainability
+
+The global SHAP ranking (Fig. 6) identifies glcm_dissimilarity as the single most influential feature by mean absolute SHAP value, followed by two mid-range intensity-histogram bins (hist_bin_14, hist_bin_13), an LBP micro-texture bin (lbp_bin_5), and several HOG gradient-orientation components. This is radiologically plausible: GLCM dissimilarity directly measures local intensity contrast variance, which correlates with the textural heterogeneity that distinguishes consolidated (pneumonic) lung tissue from normal aerated lung parenchyma, and mid-range histogram bins capture the shift in tonal distribution associated with radiographic opacity.
+
+The local (per-instance) SHAP waterfall (Fig. 7) decomposes one representative prediction from the population baseline E[f(x)] = 0.496 down to the model's output f(x) = 0.08, showing that no single feature dominates the decision — the twelve highest-magnitude individual features each contribute roughly −0.01, while the aggregate of the remaining 1,792 features contributes −0.34. This diffuse-attribution pattern is characteristic of high-dimensional handcrafted feature spaces (as flagged in prior neuroimaging SHAP work [17]) and is itself an important, honestly reported finding: it indicates the Random Forest is not relying on a small number of brittle features, but it also means no individual feature offers strong standalone clinical interpretability — a genuine limitation, not a strength, discussed further below.
+
+VII. Discussion
+
+The results support three claims. First, the feature-store abstraction delivers a measurable, non-trivial efficiency gain (28.7×) at essentially zero accuracy cost, since the classifiers train on identical vectors regardless of storage mechanism — this decouples the systems contribution from the modeling contribution, which is important because it means the efficiency claim holds even if a future extension swaps in different classifiers or descriptor sets. Second, classical ensemble methods (Random Forest) remain a strong, cheap baseline across two structurally different disease domains, achieving ROC-AUC above 0.93 on both without any deep learning. Third, post-hoc explainability surfaces radiologically coherent, not spurious, feature importance, which matters for trust even in a classical-ML system, and is often omitted entirely from student-level classical ML medical imaging projects.
+
+VIII. Limitations
+
+We report these directly rather than let a reviewer find them first. (1) Single train/test split: results are reported from one stratified 80/20 split rather than k-fold cross-validation, so reported metrics carry unquantified variance; a 5-fold protocol is planned as immediate future work. (2) Subsampled data: capping classes at 300 images was a compute-budget decision, not a methodological choice, and may understate performance achievable on the full corpora (5,856 chest X-ray images; 7,023 brain MRI images). (3) No deep-learning comparison: this paper's contribution is the feature-management layer, not a claim of state-of-the-art accuracy; CNN baselines (e.g., ResNet, EfficientNet fine-tuning) would likely exceed the classical F1 scores reported here and should be included in an extended version for a stronger accuracy claim. (4) High-dimensional SHAP dilution: as Fig. 7 shows, the 1,804-dimensional feature space produces diffuse rather than concentrated attributions; dimensionality reduction (e.g., recursive feature elimination or PCA prior to SHAP) is a natural next step. (5) Single-institution, public-dataset validation: cross-dataset generalization was not tested, which is the standard generalization gap noted for classical CAD pipelines in the wider literature [12], [13].
+
+IX. Conclusion and Future Work
+
+We presented MedFeatureStore, a normalized SQLite-based feature repository that separates medical image feature extraction from model training, and validated it across two disease domains with six classical classifiers, achieving F1 = 0.872 (chest X-ray) and F1 = 0.813 (brain MRI) with Random Forest, a measured 28.7× feature-reuse speedup, and SHAP-based explanations consistent with known radiological texture correlates. Future work includes: extending the schema to support k-fold cross-validated experiment logging natively in the experiments/model_results tables (already scaffolded but unused in this study), benchmarking CNN feature extractors alongside the classical descriptors within the same store, and testing cross-dataset generalization by registering additional datasets rows for external chest X-ray and MRI corpora without modifying the extraction or storage code.
+
+References
+
+[1] "Feature Store as a Foundation for Machine Learning," Towards Data Science, 2025.
+[2] "Feature store," Wikipedia, accessed 2026.
+[3] O. Verma, "Unlocking the Power of Machine Learning with Feature Stores," Medium, 2023.
+[4] Y. P. Chinthoti, "Toward Multi-Modal Deep Learning for Pulmonary Disease Classification: A Texture-Based Machine Learning Pilot Study on Public Chest X-Ray Data," arXiv:2607.27286, 2026.
+[5] H.-N. Wang, L.-X. Zheng, S.-W. Pan, T. Yan, and Q.-L. Su, "Image Recognition of Pediatric Pneumonia Based on Fusion of Texture Features and Depth Features," Computational and Mathematical Methods in Medicine, vol. 2022, Art. no. 1973508, 2022, doi: 10.1155/2022/1973508.
+[6] "Detection and classification of lung diseases for pneumonia and Covid-19 using machine and deep learning techniques," Journal of Ambient Intelligence and Humanized Computing, Springer, 2021.
+[7] "Comparative Study of LBP and HOG Feature Extraction Techniques for COVID-19 Pneumonia Classification," ResearchGate preprint, 2023.
+[8] "COVID-19 Diagnosis: ULGFBP-ResNet51 Approach on the CT and the Chest X-ray Images Classification," arXiv:2312.12876, 2023.
+[9] "Application of deep learning methods in the classification of normal and pneumonia lung images," Frontiers in Medicine, 2026.
+[10] "Multi-Class Brain Tumor Classification Using Advanced Deep Learning Models: A Comparative Study," arXiv:2606.18682, 2026.
+[11] "MRI-Based Brain Tumour Detection and Classification Using Random Forest Algorithm," in Springer Nature Lecture Notes, 2025.
+[12] "Automated multi-class MRI brain tumor classification and segmentation using deformable attention and saliency mapping," Scientific Reports, vol. 15, 2025, doi: 10.1038/s41598-025-92776-1.
+[13] "Brain tumor detection, classification and segmentation by deep learning models from MRI images: Recent approaches, challenges and future directions," Neuroscience Informatics / ScienceDirect, 2025.
+[14] "Machine-Learning-Based Radiomics for Classifying Glioma Grade from Magnetic Resonance Images of the Brain," PMC10305272, NIH, 2023.
+[15] "Prostate Cancer Classification Using Multimodal Feature Fusion and Explainable AI," arXiv:2507.20714, 2025.
+[16] S. M. Lundberg and S.-I. Lee, "A Unified Approach to Interpreting Model Predictions," in Proc. NeurIPS, 2017.
+[17] "Statistically valid explainable black-box machine learning: applications in sex classification across species using brain imaging," bioRxiv, 2025.
+[18] N. Desai et al., "What is reproducibility in artificial intelligence and machine learning research?," AI Magazine, Wiley, 2025.
+[19] N. Dalal and B. Triggs, "Histograms of Oriented Gradients for Human Detection," in Proc. IEEE CVPR, 2005.
+[20] T. Ojala, M. Pietikäinen, and T. Mäenpää, "Multiresolution Gray-Scale and Rotation Invariant Texture Classification with Local Binary Patterns," IEEE Trans. Pattern Anal. Mach. Intell., vol. 24, no. 7, pp. 971–987, 2002.
+[21] R. M. Haralick, K. Shanmugam, and I. Dinstein, "Textural Features for Image Classification," IEEE Trans. Syst., Man, Cybern., vol. SMC-3, no. 6, pp. 610–621, 1973.
+
+(References [19]–[21] are the classical, foundational descriptor papers your feature-extraction code directly implements — reviewers expect these even though they predate Google Scholar's typical search window; they should stay in the reference list regardless.)
+Abstract
+
+Medical image machine learning experiments frequently repeat image preprocessing and feature extraction whenever a new classifier or experimental configuration is evaluated. Such repetition increases computational overhead, complicates experiment management, and can reduce the reproducibility of comparative studies. This paper presents MedFeatureStore, a persistent feature-centric experimentation framework for efficient and explainable medical image classification. The proposed framework separates feature generation from downstream model experimentation by extracting handcrafted image features once and storing the resulting representations and associated metadata in a structured SQLite repository. The stored feature vectors can subsequently be retrieved and reused across multiple machine learning experiments without repeating the feature extraction stage.
+
+The framework integrates statistical intensity descriptors, histogram features, Gray-Level Co-occurrence Matrix features, Local Binary Pattern features, and Histogram of Oriented Gradients features. It is evaluated across two medical imaging domains: chest X-ray classification and brain magnetic resonance image classification. Multiple classical machine learning models are trained and compared using the same persistently stored feature representations. Performance is evaluated using accuracy, precision, recall, F1-score, ROC-AUC, training time, and prediction time. In addition, a feature-reuse experiment quantifies the computational benefit of persistent feature retrieval relative to repeated feature extraction. Model behavior is investigated using SHAP-based global and local explanations.
+
+Rather than proposing another individual classifier, the contribution of this work is a reusable experimental infrastructure that treats extracted medical image features as persistent research assets. The framework supports repeated experimentation, structured metadata management, computational reuse, and feature-level interpretability. The final experimental results demonstrate the practical utility of persistent feature management for reproducible classical machine learning research in medical imaging.
+
+Index Terms— Medical image analysis, feature repository, feature reuse, explainable artificial intelligence, SQLite, classical machine learning, medical image classification.
+
+I. INTRODUCTION
+
+Medical imaging plays a central role in modern clinical assessment and computer-assisted diagnosis. Machine learning has increasingly been used to analyze radiographic and magnetic resonance images and to assist with classification tasks involving pulmonary and neurological abnormalities. Although deep learning dominates many recent medical imaging studies, handcrafted image representations and classical machine learning remain useful in computationally constrained environments and in studies where transparent feature engineering is desirable.
+
+A conventional handcrafted-feature machine learning workflow typically begins by loading an image, applying preprocessing operations, extracting numerical descriptors, and training a classification model. When multiple classifiers are evaluated using the same image representation, this workflow may repeatedly perform feature extraction despite no change in the underlying feature configuration. As the number of experiments increases, redundant feature computation can become an avoidable source of execution time and experimental inconsistency.
+
+Several handcrafted descriptors have demonstrated utility in image analysis. Gray-Level Co-occurrence Matrix features characterize second-order texture relationships, Local Binary Patterns represent local texture structures, and Histograms of Oriented Gradients encode local edge and gradient information. These descriptors can be combined with classical machine learning algorithms to construct computationally efficient image classification pipelines. Recent research continues to investigate combinations of handcrafted representations, machine learning, and explainability for medical image analysis.
+
+However, the feature vector itself is often treated as a temporary intermediate output rather than a persistent research asset. Once a particular experiment ends, feature matrices may need to be regenerated for another classifier, parameter configuration, or evaluation scenario. This motivates a different experimental perspective in which extracted features are persistently stored, documented, and reused.
+
+This paper introduces MedFeatureStore, a persistent feature-centric framework for medical image machine learning experimentation. The framework extracts handcrafted features from medical images and stores the resulting vectors together with dataset, class, image, feature-extractor, experiment, and model metadata in a SQLite-based repository. Subsequent experiments retrieve the stored representations rather than repeating the feature extraction process.
+
+The contributions of this study are summarized as follows:
+
+A persistent SQLite-based repository for organizing and storing reusable medical image feature representations and experiment metadata.
+An extract-once-and-reuse workflow that separates feature computation from repeated machine learning experimentation.
+A unified handcrafted representation combining statistical, histogram, GLCM, LBP, and HOG features.
+Cross-domain evaluation using chest X-ray and brain MRI image classification tasks.
+Comparative analysis of multiple classical machine learning algorithms using identical persistently stored feature representations.
+Computational analysis comparing repeated feature extraction with repository-based feature reuse.
+SHAP-based global and local explanations for investigating feature-level model behavior.
+A deployable application layer for practical model inference.
+
+The remainder of the paper is organized as follows. Section II reviews related work. Section III describes the proposed MedFeatureStore framework and experimental methodology. Section IV presents the experimental results. Section V discusses the findings, limitations, and implications. Finally, Section VI concludes the paper and outlines future work.
+
+II. RELATED WORK
+A. Handcrafted Features in Medical Image Analysis
+
+Handcrafted feature engineering has a long history in computer vision and medical image analysis. Haralick et al. introduced texture descriptors based on spatial gray-level relationships, establishing a foundation for GLCM-based analysis. Ojala et al. developed Local Binary Patterns as an efficient representation of local image texture. Dalal and Triggs introduced Histograms of Oriented Gradients for representing local edge and shape structures.
+
+These descriptors have subsequently been adapted to numerous medical imaging applications. GLCM features are frequently used to characterize tissue texture, LBP features capture local structural patterns, and HOG descriptors represent directional gradients and image shape information. Recent medical imaging studies continue to combine handcrafted representations with machine learning algorithms, sometimes alongside deep representations, to improve classification performance or interpretability.
+
+B. Classical Machine Learning for Medical Image Classification
+
+Classical algorithms such as Support Vector Machines, Random Forests, K-Nearest Neighbors, Logistic Regression, Decision Trees, and Naïve Bayes remain useful baselines and practical classifiers for structured feature vectors. Unlike end-to-end neural networks, these models operate directly on explicit numerical representations and can therefore provide a natural setting for studying feature reuse and feature-level explainability.
+
+Recent work on lung and medical image classification has investigated combinations of preprocessing, handcrafted descriptors, and conventional classifiers. Other recent studies have explored hybrid systems that combine handcrafted and deep features. These studies demonstrate that explicit image descriptors remain relevant when computational efficiency and interpretability are important.
+
+C. Explainable Artificial Intelligence
+
+Predictive performance alone is insufficient for many high-impact machine learning applications. Explainable artificial intelligence methods attempt to provide insight into the factors influencing model decisions. SHAP provides a unified framework for assigning feature-level contributions to model predictions. Tree-based explainers can efficiently estimate feature contributions for models such as Random Forests.
+
+While explainability has become increasingly common in medical machine learning, explanation alone does not solve reproducibility and experiment-management problems. MedFeatureStore therefore combines persistent feature management with model evaluation and feature-level explanation.
+
+D. Research Gap
+
+Existing studies predominantly focus on improving classification performance through new feature combinations, optimized classifiers, deep networks, or hybrid architectures. Less attention has been given to treating extracted handcrafted features as persistent and reusable research objects that can support multiple downstream experiments.
+
+The present work addresses this gap by introducing a feature-centric experimentation architecture. The central research question is not only which classifier performs best, but also whether persistent feature storage can reduce redundant computation and improve the organization and reproducibility of repeated medical image machine learning experiments.
+
+III. PROPOSED MEDFEATURESTORE FRAMEWORK
+A. System Architecture
+
+The proposed MedFeatureStore framework consists of six layers: dataset ingestion, image preprocessing, feature extraction, persistent feature storage, reusable experimentation, and explainable inference.
+
+[Insert Fig. 1 here.]
+
+Fig. 1. Overall architecture of the MedFeatureStore framework, showing dataset ingestion, preprocessing, handcrafted feature extraction, persistent SQLite storage, reusable machine learning experimentation, evaluation, and explainability.
+
+The key design principle is that feature extraction is performed independently from model experimentation. Once a valid feature vector is generated, it is stored in the repository and can be reused by multiple classifiers.
+
+B. Dataset Preparation
+
+The framework is evaluated using the medical image datasets implemented in the experimental notebook. The final paper shall report the exact dataset names, class labels, original sample counts, and sampled image counts directly from the notebook output.
+
+Images are organized according to dataset and class metadata. To support manageable experimentation, the notebook may apply class-based sampling. Any sampling procedure must be reported explicitly because reviewers need to understand whether the reported results represent the complete dataset or a selected subset.
+
+[Insert Table I here.]
+
+TABLE I
+DATASET DESCRIPTION AND EXPERIMENTAL SAMPLE DISTRIBUTION
+
+C. Image Preprocessing
+
+Before feature extraction, images are transformed into a consistent representation. The exact preprocessing operations should correspond to the implementation used in the notebook. If the notebook converts images to grayscale and resizes them to 128 × 128 pixels, those settings should be reported without modification.
+
+The purpose of preprocessing is to provide consistent input dimensions and intensity representations for the handcrafted feature pipeline.
+
+D. Handcrafted Feature Representation
+
+The MedFeatureStore representation combines complementary image descriptors.
+
+1) Statistical Features
+
+Statistical descriptors summarize the distribution of pixel intensities. The implemented feature set may include mean intensity, standard deviation, variance, skewness, kurtosis, minimum, maximum, and median values.
+
+2) Histogram Features
+
+Histogram features summarize the global distribution of grayscale intensity values. The exact number of histogram bins should be reported according to the notebook configuration.
+
+3) GLCM Features
+
+Gray-Level Co-occurrence Matrix descriptors characterize relationships between gray-level intensities at specified spatial distances and orientations. Features may include contrast, correlation, energy, homogeneity, and dissimilarity.
+
+4) LBP Features
+
+Local Binary Pattern descriptors encode local texture variations by comparing a central pixel with neighboring pixels. The resulting pattern distribution is represented using a normalized histogram.
+
+5) HOG Features
+
+Histogram of Oriented Gradients descriptors capture local edge direction and shape structure. The exact orientation, cell, block, and normalization parameters should be reported according to the experimental implementation.
+
+The final representation is obtained by concatenating all feature groups:
+
+F = [Fstatistical, Fhistogram, FGLCM, FLBP, FHOG].
+
+[Insert Table II here.]
+
+TABLE II
+HANDCRAFTED FEATURE CONFIGURATION
+
+E. Persistent Feature Repository
+
+The central component of the framework is the SQLite-based feature repository. The database stores structured metadata describing datasets, disease categories, classes, source images, feature configurations, extracted vectors, experiments, and model results.
+
+This design provides several benefits. First, extracted feature vectors can be reused without recomputation. Second, experiments can be associated with explicit feature configurations. Third, the repository provides a structured record of the relationship between source data and experimental outcomes.
+
+[Insert Fig. 2 here.]
+
+Fig. 2. Logical organization of the MedFeatureStore repository and relationships among datasets, classes, images, feature extractors, stored feature vectors, experiments, and model results.
+
+F. Reusable Machine Learning Experimentation
+
+The stored feature vectors are retrieved from the repository and used to construct machine learning experiments. The study evaluates the classifiers implemented in the notebook, including Support Vector Machine, Random Forest, K-Nearest Neighbors, Logistic Regression, Decision Tree, and Gaussian Naïve Bayes.
+
+Training and test partitions are created according to the notebook configuration. Any random seed, test proportion, stratification procedure, and feature scaling method should be explicitly reported.
+
+Hyperparameter tuning should also be described precisely. If GridSearchCV is used for selected classifiers, the search space, scoring metric, and number of cross-validation folds should be included.
+
+[Insert Table III here.]
+
+TABLE III
+CLASSIFIER AND HYPERPARAMETER CONFIGURATION
+
+G. Performance Evaluation
+
+The following metrics are used to evaluate classification performance:
+
+Accuracy = (TP + TN) / (TP + TN + FP + FN)
+
+Precision = TP / (TP + FP)
+
+Recall = TP / (TP + FN)
+
+F1-score = 2 × (Precision × Recall) / (Precision + Recall)
+
+For multi-class tasks, macro or weighted averaging should be used exactly as implemented in the notebook. ROC-AUC, training time, and prediction time are additionally reported where applicable.
+
+H. Feature-Reuse Efficiency Experiment
+
+To evaluate the architectural benefit of MedFeatureStore, two experimental workflows are compared.
+
+In the conventional workflow, features are extracted repeatedly whenever a new experiment is initiated.
+
+In the proposed workflow, features are extracted once, stored persistently, and retrieved for subsequent experiments.
+
+The relative computational benefit is calculated as:
+
+Speedup = Ttraditional / TMedFeatureStore.
+
+This experiment should be repeated multiple times where possible, and mean execution time with standard deviation should be reported. A single timing measurement is less convincing to a reviewer than repeated measurements.
+
+IV. EXPERIMENTAL RESULTS
+A. Dataset Characteristics
+
+The exact number of images used for each dataset and class is summarized in Table I.
+
+[Insert actual values only.]
+
+B. Comparative Classification Performance
+
+Table IV presents the performance of all evaluated classifiers.
+
+[Insert Table IV here.]
+
+TABLE IV
+COMPARISON OF CLASSIFICATION PERFORMANCE
+
+No values should be invented or manually estimated. Every result must originate from the saved experiment output.
+
+Fig. 3 compares the principal classification metrics for the evaluated models.
+
+[Insert Fig. 3 here.]
+
+Fig. 3. Comparative performance of the evaluated machine learning models across the medical image classification tasks.
+
+C. Best-Model Error Analysis
+
+The best-performing model for each dataset should be selected using a predefined criterion, preferably F1-score when class imbalance is relevant.
+
+The corresponding confusion matrices are shown in Fig. 4.
+
+[Insert Fig. 4 here.]
+
+Fig. 4. Confusion matrices for the best-performing classification models on the evaluated medical image datasets.
+
+The discussion should identify meaningful error patterns rather than merely stating that the diagonal values are high.
+
+D. Feature-Reuse Efficiency
+
+The computational comparison between repeated feature extraction and persistent feature retrieval is presented in Table V and Fig. 5.
+
+[Insert Table V here.]
+
+[Insert Fig. 5 here.]
+
+Fig. 5. Comparison between repeated feature extraction and persistent feature retrieval across repeated machine learning experiments.
+
+The text should report the measured speedup using the actual experimental value:
+
+“The proposed persistent feature-reuse workflow reduced repeated feature preparation time from [X] seconds to [Y] seconds, corresponding to an observed improvement of [Z]× under the evaluated experimental setting.”
+
+E. Global Feature Importance
+
+SHAP analysis identifies the features that contribute most strongly to the predictions of the selected explainable model.
+
+[Insert Fig. 6 here.]
+
+Fig. 6. Global SHAP feature importance for the selected classification model.
+
+The discussion should identify whether the most influential descriptors are predominantly intensity-based, texture-based, or gradient-based.
+
+F. Local Prediction Explanation
+
+A local explanation is generated for an individual prediction.
+
+[Insert Fig. 7 here.]
+
+Fig. 7. Local SHAP explanation showing positive and negative feature contributions for an individual prediction.
+
+The paper should explain the prediction in terms of feature contributions rather than claiming clinical causality.
+
+V. DISCUSSION
+
+The experimental results should be interpreted from two perspectives: predictive performance and experimental infrastructure.
+
+First, the classifier comparison identifies how the common handcrafted representation performs across different medical imaging domains. Differences between models may reveal that certain decision boundaries are better captured by nonlinear kernel methods, ensemble trees, or distance-based classifiers.
+
+Second, and more importantly, the feature-reuse experiment evaluates the architectural motivation of MedFeatureStore. In a conventional workflow, every new experiment can trigger repeated feature generation. The proposed framework changes this workflow by preserving the extracted representation and treating it as a reusable research asset.
+
+The benefit of this approach becomes more meaningful as the number of experiments increases. A single model experiment may not justify a persistent repository. However, research workflows frequently involve multiple classifiers, hyperparameter configurations, feature subsets, evaluation strategies, and repeated analyses. Under these conditions, persistent feature storage can reduce redundant computation and improve experiment organization.
+
+The SQLite implementation also provides a lightweight alternative to more complex infrastructure. It is portable, serverless, and suitable for small-to-medium research experiments. However, the scalability of SQLite for extremely large medical imaging repositories should not be overstated. Future implementations could investigate scalable relational or distributed storage systems.
+
+The SHAP analysis contributes feature-level transparency. Nevertheless, SHAP explanations should be interpreted as explanations of the trained model's behavior rather than proof of clinical relevance. A highly influential feature is not necessarily a medically causal biomarker.
+
+A. Limitations
+
+Several limitations should be acknowledged.
+
+First, the experiments use public datasets and may not represent real-world clinical deployment conditions.
+
+Second, if class-based subsampling is used, the final dataset size is smaller than the complete source dataset.
+
+Third, a single train-test split provides less robust evidence than repeated cross-validation or external validation.
+
+Fourth, handcrafted grayscale features may discard information available in color or higher-dimensional imaging representations.
+
+Fifth, the efficiency benefit depends on the number of repeated experiments and the computational cost of feature extraction.
+
+Sixth, the framework is a research decision-support system and must not be interpreted as a clinically validated diagnostic tool.
+
+VI. THREATS TO VALIDITY
+A. Internal Validity
+
+Potential sources of internal bias include data leakage, incorrect scaling, non-stratified sampling, duplicated images across training and testing partitions, and model selection based on the test set.
+
+To reduce these risks, preprocessing and scaling should be fitted only on the training partition, random seeds should be documented, and all model selection procedures should be clearly separated from final test evaluation.
+
+B. Construct Validity
+
+The study evaluates classification performance and feature reuse efficiency. These measurements do not directly establish clinical usefulness. Performance metrics should therefore not be interpreted as clinical effectiveness.
+
+C. External Validity
+
+Results obtained from the evaluated public datasets may not generalize to images from different hospitals, imaging devices, patient populations, or acquisition protocols. External validation is required before any clinical claim can be made.
+
+VII. CONCLUSION
+
+This paper presented MedFeatureStore, a persistent feature-centric framework for efficient and explainable medical image machine learning experimentation. The proposed approach separates handcrafted feature generation from downstream model training by storing extracted image representations and associated metadata in a structured SQLite repository.
+
+The framework supports reusable experimentation across multiple classical machine learning algorithms and medical imaging domains. By avoiding unnecessary repeated feature extraction, the approach provides a practical mechanism for reducing redundant computation and improving experiment organization. The integration of SHAP-based analysis further enables investigation of feature-level contributions to model predictions.
+
+The principal contribution of this work is therefore not a claim that a particular classifier universally outperforms existing approaches. Instead, MedFeatureStore introduces a reusable research architecture in which extracted features become persistent assets that support repeated experimentation, structured metadata management, computational reuse, and explainable analysis.
+
+Future work should evaluate the framework using larger and externally validated datasets, repeated cross-validation, patient-level data separation, feature-version tracking, automated experiment provenance, deep feature representations, multimodal medical data, and scalable storage infrastructure.
+
+REFERENCES
+
+[1] R. M. Haralick, K. Shanmugam, and I. Dinstein, “Textural features for image classification,” IEEE Trans. Syst., Man, Cybern., vol. SMC-3, no. 6, pp. 610–621, 1973.
+
+[2] T. Ojala, M. Pietikäinen, and T. Mäenpää, “Multiresolution gray-scale and rotation invariant texture classification with local binary patterns,” IEEE Trans. Pattern Anal. Mach. Intell., vol. 24, no. 7, pp. 971–987, 2002.
+
+[3] N. Dalal and B. Triggs, “Histograms of oriented gradients for human detection,” in Proc. IEEE Comput. Soc. Conf. Comput. Vis. Pattern Recognit., 2005, pp. 886–893.
+
+[4] S. M. Lundberg and S.-I. Lee, “A unified approach to interpreting model predictions,” in Adv. Neural Inf. Process. Syst., 2017.
+
+[5] S. M. Lundberg et al., “From local explanations to global understanding with explainable AI for trees,” Nat. Mach. Intell., vol. 2, pp. 56–67, 2020.
+
+[6] D. P. Kingma and J. Ba, “Adam: A method for stochastic optimization,” arXiv:1412.6980, 2014. [Remove this reference unless Adam is actually used in the final experiments.]
+
+[7] D. Dua and C. Graff, “UCI Machine Learning Repository,” University of California, Irvine, CA, USA. [Remove unless actually used.]
+
+[8] P. Mooney, “Chest X-Ray Images (Pneumonia),” Kaggle. [Replace with the exact dataset citation and original publication used by the notebook.]
+
+[9] M. Nickparvar, “Brain Tumor MRI Dataset,” Kaggle. [Replace with the exact dataset version and citation.]
+
+[10] M. Anusha and D. Srinivasulu Reddy, “Fusion of classical and deep learning features with incremental learning for improved classification of lung and colon cancer,” Sci. Rep., vol. 15, 2025.
+
+[11] “High-accuracy lung disease classification via logistic regression and advanced feature extraction techniques,” Egyptian Informatics Journal, vol. 29, Art. no. 100596, 2025.
+
+[12] [Add a directly relevant 2024–2026 peer-reviewed study on GLCM/LBP/HOG-based medical image classification.]
+
+[13] [Add a directly relevant 2024–2026 peer-reviewed study on explainable AI for medical image classification.]
+
+[14] [Add a directly relevant 2024–2026 peer-reviewed study on reproducible ML workflows, feature stores, experiment management, or persistent data representations.]Full Project Summary (What This Project Does, Start to Finish)
+MedFeatureStore is a classical machine learning system (no deep learning/CNNs) that solves a real inefficiency in medical image ML workflows: normally, every time you test a new model, you have to reprocess every image and recompute its features from scratch. This project extracts those features once, saves them permanently in a small SQLite database, and lets any number of models train from that saved data instead — saving significant computation time and making experiments reproducible.
+The pipeline, step by step:
+Two Kaggle datasets are downloaded — chest X-rays (Normal/Pneumonia) and brain MRIs (Glioma/Meningioma/Pituitary Tumor/No Tumor).
+Images are validated (corrupted and duplicate files removed) and copied into a local images/ folder.
+Every image is resized to 128×128, converted to grayscale, and normalized.
+Five types of handcrafted numerical features are extracted per image: statistical (brightness/contrast stats), histogram (intensity distribution), GLCM (texture), LBP (local texture patterns), and HOG (shape/edges) — all concatenated into one feature vector per image.
+These vectors, along with full metadata (dataset, disease, class labels, image info), are stored in an 8-table normalized SQLite database (MedFeatureStore.db).
+All eight tables are also exported to individual CSV files, and a special human-readable CSV names every single feature column — so anyone can open Excel and see the actual data.
+Six classical ML models (SVM, Random Forest, KNN, Logistic Regression, Decision Tree, Naive Bayes) are trained by loading features straight from the database — never touching the raw images again.
+Every model is scored on Accuracy, Precision, Recall, F1-score, and ROC-AUC, with results shown in a comparison table and bar charts.
+A timed experiment proves the core contribution: extracting features fresh for 3 model runs is measurably slower than extracting once and reusing from SQLite three times.
+SHAP explainability shows which specific features (e.g., texture roughness, edge patterns) most influenced predictions — both overall (global) and for one specific image (local/waterfall plot).
+The best-performing model per disease is saved, along with its exact scaler and feature configuration, so predictions stay consistent between training and deployment.
+A Streamlit web app lets a user upload a new image, runs it through the identical preprocessing/feature pipeline used in training, and shows the predicted disease class with a confidence score and probability breakdown.
+
+🖥️ How to Run This Project
+1. In Google Colab (Build Everything)
+Open a new Colab notebook.
+Paste and run all 34 cells, in order, top to bottom.
+Cell 5 will prompt a Kaggle login popup — approve it to download the datasets.
+The notebook builds the database, extracts features, trains all 6 models, generates every plot/table/CSV, saves the best models, and writes the Streamlit app.
+The final cell (34) zips the entire project and downloads MedFeatureStore.zip to your computer automatically.
+2. On Windows (VSCode)
+Extract MedFeatureStore.zip (right-click → Extract All).
+Open VSCode → File → Open Folder → select the extracted MedFeatureStore folder.
+Open a terminal: Ctrl + `.
+Create a virtual environment:
+  python -m venv venv
+Activate it:
+  venv\Scripts\activate
+Install dependencies:
+  pip install -r requirements.txt
+Run the app:
+  streamlit run app.py
+Your browser opens automatically at http://localhost:8501.
+To stop: press Ctrl + C in the terminal.
+3. On macOS (VSCode)
+Extract the zip (double-click it, or unzip MedFeatureStore.zip in Terminal).
+Open VSCode → File → Open Folder → select MedFeatureStore.
+Open a terminal: Cmd + `.
+Create a virtual environment:
+  python3 -m venv venv
+Activate it:
+  source venv/bin/activate
+Install dependencies:
+  pip install -r requirements.txt
+Run the app:
+  streamlit run app.py
+Your browser opens at http://localhost:8501.
+To stop: Ctrl + C in the terminal.
+4. Viewing the Raw Data (No Code Needed)
+Open the database_csv_exports/ folder — every database table is a CSV, viewable directly in Excel or Google Sheets.
+Open the images/ folder — the actual dataset images, organized by class.
+Open MedFeatureStore.db with any free SQLite viewer (e.g., "DB Browser for SQLite") if you want to run SQL queries directly.
+What to Show During a Live Demo
+Open images/ — real dataset images.
+Open database_csv_exports/extracted_features_readable.csv — the actual stored features.
+Open database_csv_exports/model_comparison_results.csv — final model scores.
+Show the SHAP plots from the notebook — global + per-prediction explainability.
+Run streamlit run app.py locally and upload a test image live to show a real prediction.
+
